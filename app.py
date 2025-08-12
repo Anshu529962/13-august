@@ -12,13 +12,33 @@ from test import test_bp   # Import the test blueprint (replace with your module
 import os
 
 # PERSISTENT DISK CONFIGURATION FOR RENDER
-PERSISTENT_DISK_PATH = os.environ.get('RENDER_PERSISTENT_DISK_PATH', '.')
+# FIXED: Different paths for local vs Render environments
+import os
+
+# Detect if running locally vs on Render
+if os.path.exists('/opt/render'):
+    # Running on Render - use persistent disk path
+    PERSISTENT_DISK_PATH = os.environ.get('RENDER_PERSISTENT_DISK_PATH', '/opt/render/project/data')
+else:
+    # Running locally - use local directory
+    PERSISTENT_DISK_PATH = os.environ.get('RENDER_PERSISTENT_DISK_PATH', './databases')
+
 USER_DB_FILE = os.path.join(PERSISTENT_DISK_PATH, 'admin_users.db')
 DB_FILE = os.path.join(PERSISTENT_DISK_PATH, '1st_year.db')
 
+# Ensure directory exists
+os.makedirs(PERSISTENT_DISK_PATH, exist_ok=True)
+
+
+# Ensure directory exists
+os.makedirs(PERSISTENT_DISK_PATH, exist_ok=True)
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key'  # Required for sessions and flashes
+app.secret_key = 'your-secret-key'
+
+# DELETE THESE CONFLICTING LINES COMPLETELY:
+# USER_DB_FILE = 'admin_users.db'  # ❌ REMOVE THIS LINE
+# DB_FILE = '1st_year.db'          # ❌ REMOVE THIS LINE
 
 # Register the blueprint(s)
 
