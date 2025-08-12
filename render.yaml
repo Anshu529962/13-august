@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: medical-qbank-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: RENDER_PERSISTENT_DISK_PATH
+        value: /opt/render/project/data
+    disk:
+      name: medical-app-data
+      mountPath: /opt/render/project/data
+      sizeGB: 1

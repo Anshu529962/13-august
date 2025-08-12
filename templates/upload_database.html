@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload Database - MBBS QBank</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 700px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #007bff; padding-bottom: 20px; }
+        .form-group { margin: 25px 0; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #333; }
+        select, input[type="file"] { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 5px; font-size: 16px; box-sizing: border-box; }
+        .btn { display: inline-block; padding: 12px 24px; margin: 10px 5px; text-decoration: none; border-radius: 5px; font-weight: bold; border: none; cursor: pointer; font-size: 16px; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .upload-info { background: #e7f3ff; padding: 20px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #007bff; }
+        .requirements { background: #fff3cd; padding: 20px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #ffc107; }
+        .flash-messages { margin: 20px 0; }
+        .flash-error { background: #f8d7da; color: #721c24; padding: 12px; border-radius: 5px; border: 1px solid #f5c6cb; margin: 5px 0; }
+        .flash-success { background: #d4edda; color: #155724; padding: 12px; border-radius: 5px; border: 1px solid #c3e6cb; margin: 5px 0; }
+        .flash-info { background: #d1ecf1; color: #0c5460; padding: 12px; border-radius: 5px; border: 1px solid #bee5eb; margin: 5px 0; }
+        .file-info { background: #f8f9fa; padding: 12px; border-radius: 4px; margin: 10px 0; font-size: 0.9em; border: 1px solid #e9ecef; }
+        .category-details { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 10px; border: 1px solid #dee2e6; display: none; }
+        .actions { text-align: center; margin: 30px 0; }
+        .storage-info { background: #e8f5e8; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #28a745; }
+        .validation-info { background: #fff5f5; padding: 15px; border-radius: 6px; margin: 15px 0; border-left: 4px solid #dc3545; }
+    </style>
+    <script>
+        function showCategoryDetails() {
+            const categorySelect = document.getElementById('category');
+            const detailsDiv = document.getElementById('category-details');
+            const selectedCategory = categorySelect.value;
+            
+            if (selectedCategory) {
+                // Show specific requirements for selected category
+                let requirements = '';
+                switch(selectedCategory) {
+                    case 'qbank':
+                        requirements = `
+                            <strong>📚 QBank Database Requirements:</strong>
+                            <ul>
+                                <li><strong>Required Table:</strong> <code>qbank</code></li>
+                                <li><strong>Columns:</strong> id, subject, chapter, topic, question, answer, is_premium, created_at</li>
+                                <li><strong>File Pattern:</strong> *year*.db (e.g., 3rd_year.db, final_year.db)</li>
+                                <li><strong>Purpose:</strong> Store medical questions and answers by subject/topic</li>
+                            </ul>
+                        `;
+                        break;
+                    case 'mcq':
+                        requirements = `
+                            <strong>📝 MCQ Database Requirements:</strong>
+                            <ul>
+                                <li><strong>Required Tables:</strong> <code>mcq_questions</code>, <code>mcq_tests</code>, <code>mcq_results</code></li>
+                                <li><strong>Key Columns:</strong> question, option_a, option_b, option_c, option_d, correct_answer</li>
+                                <li><strong>File Pattern:</strong> *mcq*.db (e.g., anatomy_mcq.db, pathology_mcq.db)</li>
+                                <li><strong>Purpose:</strong> Multiple choice questions with test functionality</li>
+                            </ul>
+                        `;
+                        break;
+                    case 'users':
+                        requirements = `
+                            <strong>👤 User Database Requirements:</strong>
+                            <ul>
+                                <li><strong>Required Tables:</strong> <code>users</code>, <code>user_bookmarks</code>, <code>user_notes</code></li>
+                                <li><strong>Special:</strong> Must be named <code>admin_users.db</code> (centralized user system)</li>
+                                <li><strong>Key Columns:</strong> username, email, password, user_type, is_active</li>
+                                <li><strong>Purpose:</strong> Centralized user management and authentication</li>
+                            </ul>
+                        `;
+                        break;
+                    case 'admin':
+                        requirements = `
+                            <strong>🔧 Admin Database Requirements:</strong>
+                            <ul>
+                                <li><strong>Required Tables:</strong> <code>admin_actions</code>, <code>system_settings</code></li>
+                                <li><strong>File Pattern:</strong> admin*.db (e.g., admin_logs.db, admin_settings.db)</li>
+                                <li><strong>Key Columns:</strong> admin_user_id, action_type, timestamp, action_details</li>
+                                <li><strong>Purpose:</strong> System administration and logging</li>
+                            </ul>
+                        `;
+                        break;
+                    case 'test':
+                        requirements = `
+                            <strong>🧪 Test Database Requirements:</strong>
+                            <ul>
+                                <li><strong>Required Tables:</strong> <code>test_info</code>, <code>test_questions</code>, <code>test_results</code></li>
+                                <li><strong>File Pattern:</strong> *test*.db (e.g., midterm_test.db, final_test.db)</li>
+                                <li><strong>Key Columns:</strong> test_name, duration_minutes, question, correct_answer</li>
+                                <li><strong>Purpose:</strong> Timed test sessions and results tracking</li>
+                            </ul>
+                        `;
+                        break;
+                    default:
+                        requirements = '<p>Select a category to see specific requirements.</p>';
+                }
+                
+                detailsDiv.innerHTML = requirements;
+                detailsDiv.style.display = 'block';
+            } else {
+                detailsDiv.style.display = 'none';
+            }
+        }
+        
+        function validateFile() {
+            const fileInput = document.getElementById('database_file');
+            const file = fileInput.files[0];
+            
+            if (file) {
+                const fileName = file.name;
+                const fileSize = file.size;
+                const maxSize = 50 * 1024 * 1024; // 50MB
+                
+                // Check file extension
+                if (!fileName.toLowerCase().endsWith('.db')) {
+                    alert('Please select a .db file');
+                    fileInput.value = '';
+                    return false;
+                }
+                
+                // Check file size
+                if (fileSize > maxSize) {
+                    alert('File size must be less than 50MB');
+                    fileInput.value = '';
+                    return false;
+                }
+                
+                // Show file info
+                const fileInfo = document.getElementById('file-details');
+                fileInfo.innerHTML = `
+                    <strong>Selected File:</strong> ${fileName}<br>
+                    <strong>Size:</strong> ${(fileSize / (1024 * 1024)).toFixed(2)} MB<br>
+                    <strong>Status:</strong> <span style="color: #28a745;">✅ Ready to upload</span>
+                `;
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📤 Upload Database</h1>
+            <p>Upload an existing .db file to integrate with your MBBS QBank system</p>
+            <p style="color: #666; font-size: 0.9em;">📁 Files will be stored in persistent storage for Render deployment</p>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-messages">
+                    {% for category, message in messages %}
+                        <div class="flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Storage Information -->
+        <div class="storage-info">
+            <h3>💾 Persistent Storage Information</h3>
+            <ul>
+                <li><strong>Storage Location:</strong> Render persistent disk (survives deployments)</li>
+                <li><strong>Auto-Discovery:</strong> Files are automatically detected and categorized</li>
+                <li><strong>Backup Protection:</strong> Original files are preserved during operations</li>
+                <li><strong>Integration:</strong> Uploaded databases integrate seamlessly with existing system</li>
+            </ul>
+        </div>
+
+        <!-- Upload Requirements -->
+        <div class="requirements">
+            <h3>📋 Upload Requirements</h3>
+            <ul>
+                <li>File must have <strong>.db extension</strong> and be a valid SQLite database</li>
+                <li>Must contain <strong>required tables</strong> for the selected category</li>
+                <li>File name should <strong>not conflict</strong> with existing databases</li>
+                <li>Maximum file size: <strong>50MB</strong> (larger files may timeout)</li>
+                <li>Database will be <strong>validated automatically</strong> after upload</li>
+            </ul>
+        </div>
+
+        <!-- Upload Form -->
+        <form method="POST" enctype="multipart/form-data" onsubmit="return confirm('Are you sure you want to upload this database? It will be integrated into your system.');">
+            <div class="form-group">
+                <label for="category">📂 Database Category:</label>
+                <select name="category" id="category" required onchange="showCategoryDetails()">
+                    <option value="">Select a category...</option>
+                    {% for category, config in categories.items() %}
+                    <option value="{{ category }}">{{ config.description }} - {{ config.pattern }}</option>
+                    {% endfor %}
+                </select>
+                
+                <!-- Dynamic category details -->
+                <div id="category-details" class="category-details"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="database_file">📁 Select Database File:</label>
+                <input type="file" name="database_file" id="database_file" accept=".db" required onchange="validateFile()">
+                <div class="file-info">
+                    <strong>Supported:</strong> .db files only | <strong>Max size:</strong> 50MB | <strong>Format:</strong> SQLite 3
+                </div>
+                <div id="file-details" class="file-info" style="display: none;"></div>
+            </div>
+
+            <!-- Actions -->
+            <div class="actions">
+                <button type="submit" class="btn btn-primary">📤 Upload Database</button>
+                <a href="{{ url_for('dynamic_db_home') }}" class="btn btn-secondary">❌ Cancel</a>
+            </div>
+        </form>
+
+        <!-- Validation Information -->
+        <div class="validation-info">
+            <h3>🔍 Validation Process</h3>
+            <p><strong>After upload, your database will be automatically validated for:</strong></p>
+            <ul>
+                <li><strong>File Format:</strong> Must be a valid SQLite database</li>
+                <li><strong>Required Tables:</strong> Category-specific tables must exist</li>
+                <li><strong>Table Schema:</strong> Columns must match expected structure</li>
+                <li><strong>Data Integrity:</strong> Basic data validation checks</li>
+                <li><strong>Naming Convention:</strong> File name should match category patterns</li>
+            </ul>
+            <p><em>Invalid databases will be automatically rejected and removed.</em></p>
+        </div>
+
+        <!-- Usage Tips -->
+        <div class="upload-info">
+            <h3>💡 Upload Tips & Best Practices</h3>
+            <ul>
+                <li><strong>Backup First:</strong> Always keep a backup of your original database</li>
+                <li><strong>Test Data:</strong> Ensure your database has some test data for validation</li>
+                <li><strong>File Naming:</strong> Use descriptive names that match the category patterns</li>
+                <li><strong>Large Files:</strong> For files over 20MB, consider splitting into smaller databases</li>
+                <li><strong>Integration:</strong> The database will appear in the main manager after successful upload</li>
+                <li><strong>Troubleshooting:</strong> Check the debug page if upload fails</li>
+            </ul>
+        </div>
+
+        <!-- Examples Section -->
+        <div class="requirements">
+            <h3>🎯 Valid Database Examples</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                <div>
+                    <strong>📚 QBank Databases:</strong>
+                    <ul style="font-size: 0.9em;">
+                        <li>3rd_year.db</li>
+                        <li>final_year.db</li>
+                        <li>intern_year.db</li>
+                        <li>postgrad_year.db</li>
+                    </ul>
+                </div>
+                <div>
+                    <strong>📝 MCQ Databases:</strong>
+                    <ul style="font-size: 0.9em;">
+                        <li>anatomy_mcq.db</li>
+                        <li>pathology_mcq.db</li>
+                        <li>surgery_mcq.db</li>
+                        <li>medicine_mcq.db</li>
+                    </ul>
+                </div>
+                <div>
+                    <strong>🔧 Admin Databases:</strong>
+                    <ul style="font-size: 0.9em;">
+                        <li>admin_backup.db</li>
+                        <li>admin_settings.db</li>
+                        <li>admin_logs.db</li>
+                    </ul>
+                </div>
+                <div>
+                    <strong>🧪 Test Databases:</strong>
+                    <ul style="font-size: 0.9em;">
+                        <li>midterm_test.db</li>
+                        <li>final_test.db</li>
+                        <li>mock_test.db</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+            <p style="color: #666;">Need help? Check the <a href="{{ url_for('dynamic_db_home') }}">Database Manager</a> for existing databases and patterns.</p>
+        </div>
+    </div>
+</body>
+</html>
