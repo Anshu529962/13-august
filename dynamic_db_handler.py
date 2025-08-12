@@ -391,7 +391,7 @@ class DynamicDatabaseHandler:
         }
     
     def add_new_database(self, category, db_name):
-        """Add a new database to a category"""
+        """Add a new database to a category in persistent storage"""
         if category not in self.db_categories:
             return False, "Invalid category"
         
@@ -403,17 +403,20 @@ class DynamicDatabaseHandler:
         elif category == 'admin':
             db_file = f"admin_{db_name}.db"
         elif category == 'users':
-            db_file = "admin_users.db"  # Fixed name for centralized users
+            db_file = "admin_users.db"
         else:
             db_file = f"{db_name}.db"
         
+        # CREATE IN PERSISTENT STORAGE PATH
+        full_path = os.path.join(self.persistent_path, db_file)
+        
         # Check if database already exists
-        if os.path.exists(db_file):
+        if os.path.exists(full_path):
             return False, f"Database {db_file} already exists"
         
         try:
             # Create database with proper schema
-            conn = sqlite3.connect(db_file)
+            conn = sqlite3.connect(full_path)  # ✅ Use persistent path
             schema = self.db_categories[category]['schema']
             
             for table_name, create_sql in schema.items():
@@ -429,35 +432,35 @@ class DynamicDatabaseHandler:
         
         except Exception as e:
             return False, f"Error creating database: {str(e)}"
-    
+
     def upload_database(self, uploaded_file, category):
-        """Upload and validate a database file"""
+    
         if not uploaded_file or uploaded_file.filename == '':
             return False, "No file selected"
         
-        # Secure the filename
         filename = secure_filename(uploaded_file.filename)
         
-        # Validate file extension
         if not filename.lower().endswith('.db'):
             return False, "File must have .db extension"
         
-        # Special handling for centralized user database
+        # CREATE FULL PATH IN PERSISTENT STORAGE
+        full_path = os.path.join(self.persistent_path, filename)
+        
         if category == 'users' and filename != 'admin_users.db':
             return False, "User database must be named 'admin_users.db'"
         
-        # Check if file already exists
-        if os.path.exists(filename):
+        # Check if file already exists in persistent storage
+        if os.path.exists(full_path):
             return False, f"Database {filename} already exists"
         
         try:
-            # Save the uploaded file
-            uploaded_file.save(filename)
+            # Save the uploaded file to persistent storage
+            uploaded_file.save(full_path)  # ✅ Save to persistent path
             
             # Validate it's a proper SQLite database
-            conn = sqlite3.connect(filename)
+            conn = sqlite3.connect(full_path)  # ✅ Connect to persistent path
             
-            # Check if it has required tables for the category
+            # Rest of validation logic...
             required_tables = self.db_categories[category]['required_tables']
             
             for table in required_tables:
@@ -468,21 +471,19 @@ class DynamicDatabaseHandler:
                 
                 if not result:
                     conn.close()
-                    os.remove(filename)  # Remove invalid file
+                    os.remove(full_path)  # ✅ Remove from persistent path
                     return False, f"Database missing required table: {table}"
             
             conn.close()
-            
-            # Refresh discovered databases
             self.discovered_databases = self.discover_databases()
             
             return True, f"Database {filename} uploaded successfully"
             
         except Exception as e:
-            # Clean up on error
-            if os.path.exists(filename):
-                os.remove(filename)
+            if os.path.exists(full_path):
+                os.remove(full_path)  # ✅ Clean up persistent path
             return False, f"Error uploading database: {str(e)}"
+
     
     def get_database_stats(self, db_file):
         """Get statistics for a database with better error handling"""
@@ -1066,31 +1067,33 @@ def register_dynamic_db_routes(app, ensure_user_session_func):
     def delete_database(db_file):
         """Delete a database (with confirmation)"""
         try:
-            # Prevent deletion of centralized user database
             if db_file == 'admin_users.db':
                 flash('Cannot delete centralized user database!', 'error')
                 return redirect(url_for('dynamic_db_home'))
             
-            if os.path.exists(db_file):
+            # CREATE FULL PATH IN PERSISTENT STORAGE
+            full_path = os.path.join(dynamic_db_handler.persistent_path, os.path.basename(db_file))
+            
+            if os.path.exists(full_path):  # ✅ Check persistent path
                 # Create backup before deletion
                 backup_dir = f"deleted_backups/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 os.makedirs(backup_dir, exist_ok=True)
-                shutil.copy2(db_file, os.path.join(backup_dir, os.path.basename(db_file)))
+                shutil.copy2(full_path, os.path.join(backup_dir, os.path.basename(full_path)))
                 
-                # Delete the database
-                os.remove(db_file)
+                # Delete the database from persistent storage
+                os.remove(full_path)  # ✅ Remove from persistent path
                 
-                # Refresh discovered databases
                 dynamic_db_handler.discovered_databases = dynamic_db_handler.discover_databases()
                 
-                flash(f'Database {db_file} deleted successfully. Backup saved to {backup_dir}', 'success')
+                flash(f'Database {os.path.basename(db_file)} deleted successfully. Backup saved to {backup_dir}', 'success')
             else:
-                flash('Database file not found', 'error')
+                flash('Database file not found in persistent storage', 'error')
         
         except Exception as e:
             flash(f'Error deleting database: {str(e)}', 'error')
         
         return redirect(url_for('dynamic_db_home'))
+
     
     @app.route('/admin/debug_table/<db_file>/<table_name>')
     def debug_table_access(db_file, table_name):
