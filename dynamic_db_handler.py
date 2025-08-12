@@ -7,49 +7,13 @@ from datetime import datetime
 import shutil
 import traceback
 from werkzeug.utils import secure_filename
-# Add after your existing imports
-import os
-from werkzeug.exceptions import BadRequest
-
-# Base data directory setup
-# REPLACE THIS SECTION:
-# Base data directory setup
-
-
-# WITH THIS:
-# PERSISTENT DISK CONFIGURATION FOR RENDER
-PERSISTENT_DISK_PATH = os.environ.get('RENDER_PERSISTENT_DISK_PATH', '.')
-DATA_DIR = PERSISTENT_DISK_PATH
-DB_DIR_NAME = "databases"
-BACKUPS_DIR_NAME = "backups"
-DELETED_BACKUPS_DIR_NAME = "deleted_backups"
-
-
-def _p(*parts):
-    """Create absolute paths using persistent disk as base"""
-    return os.path.normpath(os.path.join(PERSISTENT_DISK_PATH, *parts))
-
-
-# Ensure directories exist
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(_p(DB_DIR_NAME), exist_ok=True)
-os.makedirs(_p(BACKUPS_DIR_NAME), exist_ok=True)
-os.makedirs(_p(DELETED_BACKUPS_DIR_NAME), exist_ok=True)
-
 
 
 class DynamicDatabaseHandler:
     def __init__(self):
-        # Ensure persistent disk path is set
-        self.persistent_path = os.environ.get('RENDER_PERSISTENT_DISK_PATH', '.')
-        
-        # Create necessary directories in persistent storage
+        self.persistent_path = os.environ.get('RENDER_PERSISTENT_DISK_PATH', '/opt/render/project/data')
+
         os.makedirs(self.persistent_path, exist_ok=True)
-        os.makedirs(_p(DB_DIR_NAME), exist_ok=True)
-        os.makedirs(_p(BACKUPS_DIR_NAME), exist_ok=True)
-        os.makedirs(_p(DELETED_BACKUPS_DIR_NAME), exist_ok=True)
-        
-        # Database categories configuration
 
         self.db_categories = {
             'qbank': {
@@ -185,11 +149,9 @@ class DynamicDatabaseHandler:
                 )
             '''
         }
-        
-        # Set paths using persistent disk
-        self.USERS_DB_PATH = _p(DB_DIR_NAME, "admin_users.db")
-        self.discovered_databases = self.discover_databases()
 
+        # Auto-discover databases on startup
+        self.discovered_databases = self.discover_databases()
 
     # Add the schema getter just below
     
@@ -200,18 +162,16 @@ class DynamicDatabaseHandler:
         for category, config in self.db_categories.items():
             discovered[category] = []
             
-            # Find all files matching the pattern in persistent storage
-            db_glob = _p(DB_DIR_NAME, config['pattern'])
-            matching_files = glob.glob(db_glob)
-            
-            print(f"Looking for {category} databases in: {db_glob}")
-            print(f"Found files: {matching_files}")
+            # Search in persistent disk path instead of current directory
+            pattern_path = os.path.join(self.persistent_path, config['pattern'])
+            matching_files = glob.glob(pattern_path)
             
             for db_file in matching_files:
                 if os.path.exists(db_file):
                     db_info = {
-                        'file': db_file,
+                        'file': db_file,  # Keep full path
                         'name': os.path.splitext(os.path.basename(db_file))[0],
+                        'size': os.path.getsize(db_file),
                         'modified': datetime.fromtimestamp(os.path.getmtime(db_file))
                     }
                     discovered[category].append(db_info)
@@ -220,15 +180,30 @@ class DynamicDatabaseHandler:
 
     
     def get_connection(self, db_file):
-        """Get connection to any database file with proper error handling"""
-        if not os.path.exists(db_file):
-            raise FileNotFoundError(f"Database file {db_file} not found")
+    
+        import os
         
-        conn = sqlite3.connect(db_file)
+        # Handle different input formats
+        if os.path.isabs(db_file):
+            full_path = db_file
+        else:
+            basename = os.path.basename(db_file)
+            full_path = os.path.join(self.persistent_path, basename)
+        
+        # Verify file exists
+        if not os.path.exists(full_path):
+            available = []
+            try:
+                available = [f for f in os.listdir(self.persistent_path) if f.endswith('.db')]
+            except:
+                pass
+            raise FileNotFoundError(f"Database file {os.path.basename(full_path)} not found. Available: {available}")
+        
+        conn = sqlite3.connect(full_path)
         conn.row_factory = sqlite3.Row
-        # Enable foreign keys
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
+
     
     def safe_table_name(self, table_name):
         """Safely quote table names for SQL queries"""
@@ -414,34 +389,29 @@ class DynamicDatabaseHandler:
                 )
             '''
         }
-    def add_new_database(self, category, db_name):
     
+    def add_new_database(self, category, db_name):
+        """Add a new database to a category"""
         if category not in self.db_categories:
             return False, "Invalid category"
         
         # Create database file name based on category
         if category == 'qbank':
-            db_file_name = f"{db_name}_year.db"
+            db_file = f"{db_name}_year.db"
         elif category == 'mcq':
-            db_file_name = f"{db_name}_mcq.db"
+            db_file = f"{db_name}_mcq.db"  
         elif category == 'admin':
-            db_file_name = f"admin_{db_name}.db"
+            db_file = f"admin_{db_name}.db"
         elif category == 'users':
-            db_file_name = "admin_users.db"
+            db_file = "admin_users.db"  # Fixed name for centralized users
         else:
-            db_file_name = f"{db_name}.db"
-
-        # Use persistent disk path
-        db_file = _p(DB_DIR_NAME, db_file_name)
+            db_file = f"{db_name}.db"
         
         # Check if database already exists
         if os.path.exists(db_file):
-            return False, f"Database {os.path.basename(db_file)} already exists"
+            return False, f"Database {db_file} already exists"
         
         try:
-            # Ensure the directory exists
-            os.makedirs(os.path.dirname(db_file), exist_ok=True)
-            
             # Create database with proper schema
             conn = sqlite3.connect(db_file)
             schema = self.db_categories[category]['schema']
@@ -453,16 +423,15 @@ class DynamicDatabaseHandler:
             conn.close()
             
             # Refresh discovered databases
-            self.USERS_DB_PATH = _p(DB_DIR_NAME, "admin_users.db")
             self.discovered_databases = self.discover_databases()
             
-            return True, f"Database {db_file} created successfully in persistent storage"
+            return True, f"Database {db_file} created successfully"
         
         except Exception as e:
             return False, f"Error creating database: {str(e)}"
-
+    
     def upload_database(self, uploaded_file, category):
-        """Upload and validate a database file to persistent storage"""
+        """Upload and validate a database file"""
         if not uploaded_file or uploaded_file.filename == '':
             return False, "No file selected"
         
@@ -477,27 +446,16 @@ class DynamicDatabaseHandler:
         if category == 'users' and filename != 'admin_users.db':
             return False, "User database must be named 'admin_users.db'"
         
-        # Use persistent disk path
-        target_path = _p(DB_DIR_NAME, filename)
-        
         # Check if file already exists
-        if os.path.exists(target_path):
+        if os.path.exists(filename):
             return False, f"Database {filename} already exists"
         
         try:
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
-            
-            # Save the uploaded file to persistent disk
-            uploaded_file.save(target_path)
-        
-        # ... rest of validation code stays the same
-        
-        # Refresh discovered databases
-       
+            # Save the uploaded file
+            uploaded_file.save(filename)
             
             # Validate it's a proper SQLite database
-            conn = sqlite3.connect(target_path)
+            conn = sqlite3.connect(filename)
             
             # Check if it has required tables for the category
             required_tables = self.db_categories[category]['required_tables']
@@ -516,17 +474,15 @@ class DynamicDatabaseHandler:
             conn.close()
             
             # Refresh discovered databases
-            self.USERS_DB_PATH = _p(DB_DIR_NAME, "admin_users.db")
             self.discovered_databases = self.discover_databases()
             
-            return True, f"Database {filename} uploaded successfully to persistent storage"
+            return True, f"Database {filename} uploaded successfully"
             
         except Exception as e:
             # Clean up on error
-            if os.path.exists(target_path):
-                os.remove(target_path)
+            if os.path.exists(filename):
+                os.remove(filename)
             return False, f"Error uploading database: {str(e)}"
-
     
     def get_database_stats(self, db_file):
         """Get statistics for a database with better error handling"""
@@ -573,31 +529,26 @@ class DynamicDatabaseHandler:
             return {'error': str(e)}
     
     def backup_all_databases(self):
-    
+        """Backup all discovered databases"""
         try:
-            ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-            backup_dir = _p(BACKUPS_DIR_NAME, ts)
-            
-            # Ensure backup directory exists in persistent storage
+            backup_dir = f"backups/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             os.makedirs(backup_dir, exist_ok=True)
-
+            
             backup_count = 0
             for category, databases in self.discovered_databases.items():
-                category_dir = _p(BACKUPS_DIR_NAME, ts, category)
+                category_dir = os.path.join(backup_dir, category)
                 os.makedirs(category_dir, exist_ok=True)
                 
                 for db_info in databases:
                     source_file = db_info['file']
-                    dest_file = _p(BACKUPS_DIR_NAME, ts, category, os.path.basename(source_file))
-
+                    dest_file = os.path.join(category_dir, os.path.basename(source_file))
                     shutil.copy2(source_file, dest_file)
                     backup_count += 1
             
-            return True, f"Successfully backed up {backup_count} databases to persistent storage: {backup_dir}"
+            return True, f"Successfully backed up {backup_count} databases to {backup_dir}"
         
         except Exception as e:
             return False, f"Backup failed: {str(e)}"
-
     
     def migrate_users_to_centralized_db(self):
         """Migrate users from all QBank databases to centralized admin_users.db"""
@@ -662,9 +613,7 @@ class DynamicDatabaseHandler:
             centralized_conn.close()
             
             # Refresh discovered databases
-            self.USERS_DB_PATH = _p(DB_DIR_NAME, "admin_users.db")
             self.discovered_databases = self.discover_databases()
-
             
             return True, f"Successfully migrated {migration_count} user records to admin_users.db"
             
@@ -729,8 +678,8 @@ def get_all_qbank_subjects():
 
 
 def find_subject_database(subject_name):
-    """Find which database contains a specific subject in persistent storage"""
-    # Refresh discovery with persistent disk paths
+    """Find which database contains a specific subject"""
+    # Refresh discovery
     dynamic_db_handler.discovered_databases = dynamic_db_handler.discover_databases()
     
     qbank_databases = dynamic_db_handler.discovered_databases.get('qbank', [])
@@ -754,22 +703,8 @@ def find_subject_database(subject_name):
         except Exception as e:
             print(f"Error checking subject in {db_file}: {e}")
     
-    # Default fallback - ensure it uses persistent disk path
-    return _p(DB_DIR_NAME, '1st_year.db')
-
-    
     # Default fallback
     return '1st_year.db'
-
-def resolve_db_path(db_file_param):
-    """Resolve database path in persistent storage"""
-    base = os.path.basename(db_file_param)
-    path = _p(DB_DIR_NAME, base)
-    if not os.path.isfile(path):
-        raise BadRequest("Invalid database file")
-    return path
-
-
 
 
 def register_dynamic_db_routes(app, ensure_user_session_func):
@@ -861,10 +796,9 @@ def register_dynamic_db_routes(app, ensure_user_session_func):
     
     @app.route('/admin/manage_db/<db_file>')
     def manage_specific_database(db_file):
+        """Manage a specific database with better error handling"""
         try:
-            db_file = resolve_db_path(db_file)
             conn = dynamic_db_handler.get_connection(db_file)
-
             
             # Get all tables
             tables = conn.execute("""
