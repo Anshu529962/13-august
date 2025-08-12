@@ -12,7 +12,7 @@ from test import test_bp   # Import the test blueprint (replace with your module
 import os
 
 # PERSISTENT DISK CONFIGURATION FOR RENDER
-PERSISTENT_DISK_PATH = os.environ.get('RENDER_PERSISTENT_DISK_PATH', '.')
+PERSISTENT_DISK_PATH = os.environ.get('RENDER_PERSISTENT_DISK_PATH', '/opt/render/project/data')
 USER_DB_FILE = os.path.join(PERSISTENT_DISK_PATH, 'admin_users.db')
 DB_FILE = os.path.join(PERSISTENT_DISK_PATH, '1st_year.db')
 
