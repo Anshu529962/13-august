@@ -477,17 +477,14 @@
                         <span>Videos</span>
                     </button>
                 </li>
-                {% if session.user_type == 'admin' %}
-<li>
-    <a href="{{ url_for('dynamic_db_home') }}" class="nav-item">
-        <span class="text-lg">⚙️</span>
-        <span>Admin Panel</span>
-    </a>
-</li>
-{% endif %}
-
-
-
+                {% if session.user_id %}
+                <li>
+                    <a href="{{ url_for('dynamic_db_home') }}" class="nav-item">
+                        <span class="text-lg">⚙️</span>
+                        <span>Admin Panel</span>
+                    </a>
+                </li>
+                {% endif %}
             </ul>
         </div>
 
@@ -525,6 +522,18 @@
             {% endif %}
         </div>
 
+        <div class="auth-actions flex flex-wrap gap-4 mb-6">
+            {% if session.username %}
+                <a href="{{ url_for('mcq.mcq_home') }}" class="auth-btn bg-green-500 text-white">🧠 MCQ Practice</a>
+                <a href="{{ url_for('dynamic_db_home') }}" class="auth-btn bg-gray-500 text-white">⚙️ Database Manager</a>
+                <a href="{{ url_for('logout') }}" class="auth-btn bg-red-500 text-white">Logout</a>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="auth-btn bg-slate-700 text-white">Login</a>
+                <a href="{{ url_for('signup') }}" class="auth-btn bg-cyan-400 text-white">Sign Up</a>
+                <a href="{{ url_for('mcq.mcq_home') }}" class="auth-btn bg-green-500 text-white">🧠 Try MCQ Practice</a>
+            {% endif %}
+        </div>
+
         <div class="main-section space-y-6">
             {% for year, subjects in grouped_subjects.items() %}
                 <div class="year-section">
@@ -544,7 +553,7 @@
                                     {% elif 'pathology' in subject_name.lower() %}🔬
                                     {% elif 'microbiology' in subject_name.lower() %}🦠
                                     {% elif 'forensic' in subject_name.lower() %}⚖️
-                                    {% elif 'community medicine' in subject_name.lower() %}🏥
+                                    {% elif 'psm' in subject_name.lower() %}🏥
                                     {% elif 'ent' in subject_name.lower() %}👂
                                     {% elif 'ophthalmology' in subject_name.lower() %}👁️
                                     {% elif 'medicine' in subject_name.lower() %}🩺
@@ -595,4 +604,4 @@
         });
     </script>
 </body>
-</html>
+</html>>
