@@ -806,68 +806,50 @@ def login():
         password = request.form['password']
 
         try:
-            # Connect to persistent storage database
-            conn = get_user_db_connection()  # Always uses persistent storage
+            conn = get_user_db_connection()
+            
+            # Set row_factory for dictionary-like access
+            conn.row_factory = sqlite3.Row
+            
             user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
             conn.close()
 
             if user and check_password_hash(user['password'], password):
-                # Check if user account is active
-                if not user.get('is_active', 1):
+                # Now you can safely use dictionary-style access
+                if not user['is_active']:
                     flash('Your account has been deactivated. Please contact administrator.')
                     return redirect(url_for('login'))
 
                 try:
-                    # Update last login with error handling
+                    # Update last login
                     user_conn = get_user_db_connection()
-                    
-                    # Check if last_login column exists (for backward compatibility)
-                    cursor = user_conn.execute("PRAGMA table_info(users)")
-                    columns = [column[1] for column in cursor.fetchall()]
-                    
-                    if 'last_login' in columns:
-                        user_conn.execute(
-                            "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
-                            (user['id'],)
-                        )
-                        user_conn.commit()
-                        print(f"✅ Updated last_login for user: {user['email']}")
-                    else:
-                        print("⚠️ last_login column not found, skipping update")
-                    
+                    user_conn.execute(
+                        "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
+                        (user['id'],)
+                    )
+                    user_conn.commit()
                     user_conn.close()
+                    print(f"✅ Updated last_login for user: {user['email']}")
                     
                 except Exception as e:
                     print(f"❌ Error updating last_login: {e}")
-                    # Continue with login - don't fail authentication for this
 
-                # Create user session for both admin and student users
-                try:
-                    create_user_session(user['id'], user['username'], user['user_type'])
-                    print(f"✅ Session created for {user['user_type']}: {user['email']}")
-                except Exception as e:
-                    print(f"❌ Error creating session: {e}")
-                    flash('Login error occurred. Please try again.')
-                    return redirect(url_for('login'))
+                # Create session
+                create_user_session(user['id'], user['username'], user['user_type'])
 
-                # Determine redirect based on user type
+                # Redirect based on user type
                 if user['user_type'] == 'admin':
                     flash(f'Welcome back, Admin {user["username"]}!')
-                    # Redirect admin users to admin dashboard
-                    return redirect(url_for('admin_dashboard'))  # or wherever admins should go
+                    return redirect(url_for('admin_dashboard'))  # or your admin route
                 else:
                     flash(f'Welcome back, {user["username"]}!')
-                    # Redirect students to main application
                     return redirect(url_for('home'))
                     
             else:
-                # Authentication failed
                 flash('Invalid email or password.')
-                print(f"❌ Authentication failed for: {email}")
                 return redirect(url_for('login'))
 
         except Exception as e:
-            # Database connection or query error
             print(f"❌ Database error during login: {e}")
             flash('Login system temporarily unavailable. Please try again.')
             return redirect(url_for('login'))
