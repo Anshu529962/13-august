@@ -27,6 +27,8 @@
         .error-item { color: #dc3545; font-weight: bold; }
         .action-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
         .upload-info { background: #e7f3ff; padding: 10px; border-radius: 4px; margin: 10px 0; border-left: 4px solid #007bff; font-size: 0.9em; }
+        .persistent-status { background: #d4edda; color: #155724; padding: 8px 15px; border-radius: 15px; font-size: 0.85em; font-weight: bold; }
+        .persistent-status.local { background: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
@@ -34,7 +36,20 @@
         <div class="header">
             <h1>🗄️ Dynamic Database Manager</h1>
             <p>Manage all your MBBS QBank databases from one place</p>
-            <p><small>📁 Persistent Storage Path: {{ config.get('PERSISTENT_DISK_PATH', 'Local') }}</small></p>
+            <!-- FIXED: Updated persistent storage path display -->
+            <p>
+                <small>📁 Persistent Storage Path: 
+                    {% if persistent_path %}
+                        {% if persistent_path == '/opt/render/project/data' %}
+                            <span class="persistent-status">✅ Render Persistent SSD</span>
+                        {% else %}
+                            <span class="persistent-status">{{ persistent_path }}</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="persistent-status local">⚠️ Local Development</span>
+                    {% endif %}
+                </small>
+            </p>
         </div>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -86,6 +101,9 @@
                                 📅 <strong>Modified:</strong> {{ db_info.modified.strftime('%Y-%m-%d %H:%M') }}
                                 {% if 'total_records' in db_info %}
                                 | 📋 <strong>Total Records:</strong> {{ db_info.total_records }}
+                                {% endif %}
+                                {% if db_info.size %}
+                                | 💾 <strong>Size:</strong> {{ "%.1f"|format(db_info.size / 1024) }} KB
                                 {% endif %}
                             </div>
 
@@ -158,6 +176,41 @@
             </div>
         </div>
 
+        <!-- ENHANCED: Persistent Storage Status Section -->
+        <div style="margin-top: 30px; background: #e7f3ff; padding: 20px; border-radius: 8px; border-left: 4px solid #007bff;">
+            <h3>💾 Storage Configuration</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 6px;">
+                    <h4 style="margin: 0; color: #007bff;">Storage Location</h4>
+                    <p style="margin: 5px 0; font-size: 1.2em; font-weight: bold;">
+                        {% if persistent_path == '/opt/render/project/data' %}
+                            ✅ Persistent SSD
+                        {% elif persistent_path %}
+                            📁 {{ persistent_path }}
+                        {% else %}
+                            ⚠️ Local Development
+                        {% endif %}
+                    </p>
+                </div>
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 6px;">
+                    <h4 style="margin: 0; color: #007bff;">Deployment Safety</h4>
+                    <p style="margin: 5px 0; font-size: 1.2em; font-weight: bold;">
+                        {% if persistent_path == '/opt/render/project/data' %}
+                            ✅ Guaranteed
+                        {% else %}
+                            ⚠️ Check Configuration
+                        {% endif %}
+                    </p>
+                </div>
+                <div style="text-align: center; padding: 15px; background: white; border-radius: 6px;">
+                    <h4 style="margin: 0; color: #007bff;">Total Databases</h4>
+                    <p style="margin: 5px 0; font-size: 1.5em; font-weight: bold;">
+                        {{ discovered_databases.values() | list | sum(attribute='__len__') }}
+                    </p>
+                </div>
+            </div>
+        </div>
+
         <div style="margin-top: 40px; text-align: center; color: #666; border-top: 1px solid #ddd; padding-top: 20px;">
             <h3>🔍 Auto-Discovery Information</h3>
             <p><strong>This system automatically detects databases based on filename patterns:</strong></p>
@@ -179,9 +232,15 @@
                     <li>Use "🔍 Debug" to troubleshoot database access issues</li>
                     <li>Regular backups are recommended before making major changes</li>
                     <li>The centralized user database (admin_users.db) cannot be deleted</li>
+                    {% if persistent_path == '/opt/render/project/data' %}
+                    <li><strong>✅ All your data is stored on persistent SSD and survives deployments!</strong></li>
+                    {% else %}
+                    <li><strong>⚠️ Verify persistent storage configuration for deployment safety</strong></li>
+                    {% endif %}
                 </ul>
             </div>
         </div>
     </div>
 </body>
 </html>
+
