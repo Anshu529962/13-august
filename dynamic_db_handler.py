@@ -180,29 +180,40 @@ class DynamicDatabaseHandler:
 
     
     def get_connection(self, db_file):
-    
         import os
         
-        # Handle different input formats
+        # Enhanced path resolution logic
         if os.path.isabs(db_file):
+            # If it's already an absolute path, use it as-is
             full_path = db_file
         else:
-            basename = os.path.basename(db_file)
+            # If it's just a filename, build the full path using persistent storage
+            basename = os.path.basename(db_file)  # Extract just the filename
             full_path = os.path.join(self.persistent_path, basename)
         
-        # Verify file exists
-        if not os.path.exists(full_path):
-            available = []
-            try:
-                available = [f for f in os.listdir(self.persistent_path) if f.endswith('.db')]
-            except:
-                pass
-            raise FileNotFoundError(f"Database file {os.path.basename(full_path)} not found. Available: {available}")
+        # Debug logging (remove after fixing)
+        print(f"DEBUG get_connection:")
+        print(f"  Input: {db_file}")
+        print(f"  Persistent path: {self.persistent_path}")
+        print(f"  Final path: {full_path}")
+        print(f"  File exists: {os.path.exists(full_path)}")
         
+        # Enhanced error handling
+        if not os.path.exists(full_path):
+            try:
+                available_files = [f for f in os.listdir(self.persistent_path) if f.endswith('.db')]
+                error_msg = f"Database file '{os.path.basename(full_path)}' not found in {self.persistent_path}. Available files: {available_files}"
+            except Exception as e:
+                error_msg = f"Database file '{os.path.basename(full_path)}' not found and cannot list directory: {e}"
+            
+            raise FileNotFoundError(error_msg)
+        
+        # Create connection with proper configuration
         conn = sqlite3.connect(full_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         return conn
+
 
     
     def safe_table_name(self, table_name):
@@ -800,11 +811,15 @@ def register_dynamic_db_routes(app, ensure_user_session_func):
         
         return redirect(url_for('dynamic_db_home'))
     
+    # Fix routes that call the handler
     @app.route('/admin/manage_db/<db_file>')
     def manage_specific_database(db_file):
-        """Manage a specific database with better error handling"""
+        # Ensure we pass just the basename to the handler
+        db_basename = os.path.basename(db_file)  # Extract just filename
         try:
-            conn = dynamic_db_handler.get_connection(db_file)
+            conn = dynamic_db_handler.get_connection(db_basename)
+        # ... rest of your code
+
             
             # Get all tables
             tables = conn.execute("""
@@ -1109,9 +1124,14 @@ def register_dynamic_db_routes(app, ensure_user_session_func):
     
     @app.route('/admin/debug_table/<db_file>/<table_name>')
     def debug_table_access(db_file, table_name):
-        """Debug function to diagnose table access issues"""
         try:
-            conn = dynamic_db_handler.get_connection(db_file)
+            # Extract just the basename from the URL parameter
+            db_basename = os.path.basename(db_file)
+            print(f"Debug route called with: {db_file}, using basename: {db_basename}")
+            
+            conn = dynamic_db_handler.get_connection(db_basename)
+            # ... rest of your debug code
+
             
             # Check if table exists
             exists = dynamic_db_handler.table_exists(conn, table_name)
