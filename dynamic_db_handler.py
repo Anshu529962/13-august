@@ -745,10 +745,11 @@ def register_dynamic_db_routes(app, ensure_user_session_func):
                     db_stats[category].append({**db_info, 'error': stats['error']})
         
         return render_template('dynamic_db_manager.html', 
-                             categories=dynamic_db_handler.db_categories,
-                             discovered_databases=dynamic_db_handler.discovered_databases,
-                             db_stats=db_stats)
-    
+                            categories=dynamic_db_handler.db_categories,
+                            discovered_databases=dynamic_db_handler.discovered_databases,
+                            db_stats=db_stats,
+                            persistent_path=dynamic_db_handler.persistent_path)  # ← Add this line
+
     @app.route('/admin/add_database', methods=['GET', 'POST'])
     def add_new_database():
         """Add a new database"""
