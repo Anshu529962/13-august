@@ -552,15 +552,20 @@ class DynamicDatabaseHandler:
             return False, f"Backup failed: {str(e)}"
     
     def migrate_users_to_centralized_db(self):
-        """Migrate users from all QBank databases to centralized admin_users.db"""
+    
         try:
-            # Create centralized user database if it doesn't exist
-            if not os.path.exists('admin_users.db'):
+            # ✅ FIXED - Use persistent storage path
+            centralized_db_path = os.path.join(self.persistent_path, 'admin_users.db')
+            
+            if not os.path.exists(centralized_db_path):
                 success, message = self.add_new_database('users', 'centralized')
                 if not success:
                     return False, f"Failed to create centralized user database: {message}"
             
             centralized_conn = self.get_connection('admin_users.db')
+        # Rest of function remains the same...
+
+
             migration_count = 0
             
             # Migrate from all QBank databases
@@ -1071,13 +1076,20 @@ def register_dynamic_db_routes(app, ensure_user_session_func):
                 flash('Cannot delete centralized user database!', 'error')
                 return redirect(url_for('dynamic_db_home'))
             
-            # CREATE FULL PATH IN PERSISTENT STORAGE
-            full_path = os.path.join(dynamic_db_handler.persistent_path, os.path.basename(db_file))
+            # ✅ FIXED - Ensure proper path resolution
+            if os.path.isabs(db_file):
+                full_path = os.path.join(dynamic_db_handler.persistent_path, os.path.basename(db_file))
+            else:
+                full_path = os.path.join(dynamic_db_handler.persistent_path, db_file)
             
-            if os.path.exists(full_path):  # ✅ Check persistent path
-                # Create backup before deletion
-                backup_dir = f"deleted_backups/{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            if os.path.exists(full_path):
+                # ✅ FIXED - Create backup in persistent storage
+                backup_base_dir = os.path.join(dynamic_db_handler.persistent_path, 'deleted_backups')
+                backup_dir = os.path.join(backup_base_dir, datetime.now().strftime('%Y%m%d_%H%M%S'))
                 os.makedirs(backup_dir, exist_ok=True)
+            
+            # Rest of function remains the same...
+
                 shutil.copy2(full_path, os.path.join(backup_dir, os.path.basename(full_path)))
                 
                 # Delete the database from persistent storage
