@@ -318,10 +318,24 @@ def ensure_user_session():
     return session['user_id']
 
 def create_user_session(user_id, username, user_type):
-    session['user_id'] = user_id
-    session['username'] = username
-    session['user_type'] = user_type   # << Important for admin/student role
-    session.permanent = True
+    """Create user session with comprehensive data"""
+    try:
+        session['user_id'] = user_id
+        session['username'] = username
+        session['user_type'] = user_type
+        session['logged_in'] = True
+        session['login_time'] = datetime.datetime.now().isoformat()
+        
+        # Set session timeout (optional)
+        session.permanent = True
+        
+        print(f"✅ Session created: {username} ({user_type})")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Session creation error: {e}")
+        return False
+
 
 # --------------------
 # CENTRALIZED HELPER FUNCTIONS
@@ -791,32 +805,71 @@ def login():
         email = request.form['username'].strip().lower()
         password = request.form['password']
 
-        conn = get_user_db_connection()  # Always admin_users.db
-        user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-        conn.close()
+        try:
+            # Connect to persistent storage database
+            conn = get_user_db_connection()  # Always uses persistent storage
+            user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+            conn.close()
 
-        if user and check_password_hash(user['password'], password):
-            # Update last login
-            user_conn = get_user_db_connection()
-            user_conn.execute(
-                "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
-                (user['id'],)
-            )
-            user_conn.commit()
-            user_conn.close()
-            
-            # If user is admin, optionally redirect to admin login route
-            if user['user_type'] == 'admin':
-                flash('Admins must login via the admin login page.')
-                return redirect(url_for('admin_login'))
+            if user and check_password_hash(user['password'], password):
+                # Check if user account is active
+                if not user.get('is_active', 1):
+                    flash('Your account has been deactivated. Please contact administrator.')
+                    return redirect(url_for('login'))
 
-            # Pass user_type to session in create_user_session
-            create_user_session(user['id'], user['username'], user['user_type'])
+                try:
+                    # Update last login with error handling
+                    user_conn = get_user_db_connection()
+                    
+                    # Check if last_login column exists (for backward compatibility)
+                    cursor = user_conn.execute("PRAGMA table_info(users)")
+                    columns = [column[1] for column in cursor.fetchall()]
+                    
+                    if 'last_login' in columns:
+                        user_conn.execute(
+                            "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
+                            (user['id'],)
+                        )
+                        user_conn.commit()
+                        print(f"✅ Updated last_login for user: {user['email']}")
+                    else:
+                        print("⚠️ last_login column not found, skipping update")
+                    
+                    user_conn.close()
+                    
+                except Exception as e:
+                    print(f"❌ Error updating last_login: {e}")
+                    # Continue with login - don't fail authentication for this
 
-            flash(f'Welcome back, {user["username"]}!')
-            return redirect(url_for('home'))
-        else:
-            flash('Invalid credentials.')
+                # Create user session for both admin and student users
+                try:
+                    create_user_session(user['id'], user['username'], user['user_type'])
+                    print(f"✅ Session created for {user['user_type']}: {user['email']}")
+                except Exception as e:
+                    print(f"❌ Error creating session: {e}")
+                    flash('Login error occurred. Please try again.')
+                    return redirect(url_for('login'))
+
+                # Determine redirect based on user type
+                if user['user_type'] == 'admin':
+                    flash(f'Welcome back, Admin {user["username"]}!')
+                    # Redirect admin users to admin dashboard
+                    return redirect(url_for('admin_dashboard'))  # or wherever admins should go
+                else:
+                    flash(f'Welcome back, {user["username"]}!')
+                    # Redirect students to main application
+                    return redirect(url_for('home'))
+                    
+            else:
+                # Authentication failed
+                flash('Invalid email or password.')
+                print(f"❌ Authentication failed for: {email}")
+                return redirect(url_for('login'))
+
+        except Exception as e:
+            # Database connection or query error
+            print(f"❌ Database error during login: {e}")
+            flash('Login system temporarily unavailable. Please try again.')
             return redirect(url_for('login'))
 
     return render_template('login.html')
@@ -1522,4 +1575,5 @@ register_mcq_routes(app)
 app.register_blueprint(test_bp)
 
 if __name__ == '__main__':
+    app.run(debug=True)
     app.run(debug=True)
