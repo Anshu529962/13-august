@@ -14,6 +14,11 @@ import os
 # PERSISTENT DISK CONFIGURATION FOR RENDER
 # FIXED: Different paths for local vs Render environments
 import os
+# Add to app.py
+from init_databases import initialize_databases_on_startup
+
+# Call during app initialization
+
 
 # Detect if running locally vs on Render
 if os.path.exists('/opt/render'):
@@ -200,7 +205,9 @@ def init_db():
 
 # Initialize database when app starts
 with app.app_context():
+    initialize_databases_on_startup()
     init_db()
+    
 
 # --------------------
 # FREE CONTENT MANAGEMENT FUNCTIONS
