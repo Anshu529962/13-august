@@ -879,7 +879,7 @@ def admin_login():
         if user and check_password_hash(user['password'], password) and user['user_type'] == 'admin':
             create_user_session(user['id'], user['username'], 'admin')
             flash(f'Welcome Admin {user["username"]}!', 'success')
-            return redirect(url_for('admin_dashboard'))  # your admin dashboard or panel
+            return redirect(url_for('dynamic_db_home'))  # your admin dashboard or panel
         else:
             flash('Invalid admin credentials.', 'danger')
             return redirect(url_for('admin_login'))
