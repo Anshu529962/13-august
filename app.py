@@ -41,16 +41,8 @@ os.makedirs(PERSISTENT_DISK_PATH, exist_ok=True)
 app = Flask(__name__)
 app.secret_key = 'your-secret-key'
 
-# DELETE THESE CONFLICTING LINES COMPLETELY:
-# USER_DB_FILE = 'admin_users.db'  # ❌ REMOVE THIS LINE
-# DB_FILE = '1st_year.db'          # ❌ REMOVE THIS LINE
-
-# Register the blueprint(s)
 
 
-
-
-# Add this line before if __name__ == '__main__':
 
 
 # Try this import method first
@@ -81,15 +73,31 @@ for rule in app.url_map.iter_rules():
 
 
 def get_user_db_connection():
-    """UPDATED: Use persistent disk path"""
+    """UPDATED: Use persistent disk path with error handling"""
     db_path = os.path.join(PERSISTENT_DISK_PATH, 'admin_users.db')
     
     # Ensure directory exists
-    os.makedirs(PERSISTENT_DISK_PATH, exist_ok=True)
+    try:
+        os.makedirs(PERSISTENT_DISK_PATH, exist_ok=True)
+    except PermissionError as e:
+        print(f"❌ Permission error creating directory: {e}")
+        raise
     
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+    # Verify database file exists
+    if not os.path.exists(db_path):
+        print(f"❌ Database file not found at: {db_path}")
+        # Initialize database if missing
+        from init_databases import initialize_databases_on_startup
+        initialize_databases_on_startup()
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except sqlite3.Error as e:
+        print(f"❌ SQLite connection error: {e}")
+        raise
+
 
 def get_dynamic_subject_connection(subject_name):
     """UPDATED: Use persistent disk for content databases"""
@@ -807,21 +815,18 @@ def login():
 
         try:
             conn = get_user_db_connection()
-            
-            # Set row_factory for dictionary-like access
             conn.row_factory = sqlite3.Row
             
             user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
             conn.close()
 
             if user and check_password_hash(user['password'], password):
-                # Now you can safely use dictionary-style access
                 if not user['is_active']:
                     flash('Your account has been deactivated. Please contact administrator.')
                     return redirect(url_for('login'))
 
+                # Update last login
                 try:
-                    # Update last login
                     user_conn = get_user_db_connection()
                     user_conn.execute(
                         "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
@@ -830,31 +835,36 @@ def login():
                     user_conn.commit()
                     user_conn.close()
                     print(f"✅ Updated last_login for user: {user['email']}")
-                    
                 except Exception as e:
-                    print(f"❌ Error updating last_login: {e}")
+                    print(f"⚠️ Could not update last_login: {e}")
+                    # Don't fail login just because last_login update failed
 
                 # Create session
                 create_user_session(user['id'], user['username'], user['user_type'])
 
-                # Redirect based on user type
+                # Success messages and redirects
                 if user['user_type'] == 'admin':
-                    flash(f'Welcome back, Admin {user["username"]}!')
-                    return redirect(url_for('admin_dashboard'))  # or your admin route
+                    flash(f'Welcome back, Admin {user["username"]}!', 'success')
+                    return redirect(url_for('admin_dashboard'))
                 else:
-                    flash(f'Welcome back, {user["username"]}!')
+                    flash(f'Welcome back, {user["username"]}!', 'success')
                     return redirect(url_for('home'))
                     
             else:
-                flash('Invalid email or password.')
+                flash('Invalid email or password.', 'error')
                 return redirect(url_for('login'))
 
+        except sqlite3.Error as db_error:
+            print(f"❌ Database error during login: {db_error}")
+            flash('Database connection issue. Please try again in a moment.', 'error')
+            return redirect(url_for('login'))
         except Exception as e:
-            print(f"❌ Database error during login: {e}")
-            flash('Login system temporarily unavailable. Please try again.')
+            print(f"❌ Unexpected error during login: {e}")
+            flash('Login system temporarily unavailable. Please try again.', 'error')
             return redirect(url_for('login'))
 
     return render_template('login.html')
+
 
 @app.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
