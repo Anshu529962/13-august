@@ -55,9 +55,9 @@ app.secret_key = 'your-secret-key'
 
 # Try this import method first
 try:
-    from dynamic_db_handlercop1 import dynamic_db_handler, register_dynamic_db_routes, find_subject_database, get_all_qbank_subjects
+    from dynamic_db_handler import dynamic_db_handler, register_dynamic_db_routes, find_subject_database, get_all_qbank_subjects
 except ImportError:
-    from dynamic_db_handlercop1 import DynamicDatabaseHandler, register_dynamic_db_routes, find_subject_database, get_all_qbank_subjects
+    from dynamic_db_handler import DynamicDatabaseHandler, register_dynamic_db_routes, find_subject_database, get_all_qbank_subjects
     dynamic_db_handler = DynamicDatabaseHandler()
 
 # CENTRALIZED USER DATABASE CONFIGURATION
